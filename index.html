@@ -3,26 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>¡Vamos! Spaans</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23c2410c%22/%3E%3Ctext x=%2250%22 y=%2272%22 font-size=%2266%22 font-weight=%22800%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Segoe UI,sans-serif%22%3E%C2%A1%3C/text%3E%3C/svg%3E">
+  <title>¡Vamos!</title>
+  <link rel="icon" href="icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <meta name="theme-color" content="#c2410c">
+  <meta name="theme-color" content="#2448b8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&display=swap">
   <link rel="stylesheet" href="css/style.css">
   <script src="js/i18n.js"></script>
 </head>
 <body>
   <header class="top">
-    <button class="brand" id="brand">¡Vamos!<span>Spaans oefenen</span></button>
-    <div class="topstats" id="topstats"></div>
+    <div class="topin">
+      <button class="brand" id="brand" aria-label="¡Vamos!">¡Vamos!</button>
+      <nav class="tabs">
+        <button data-nav="home" aria-current="page">Vandaag</button>
+        <button data-nav="progress">Voortgang</button>
+        <button data-nav="list">Woordenlijst</button>
+        <button data-nav="settings">Instellingen</button>
+      </nav>
+      <div class="topstats" id="topstats"></div>
+    </div>
   </header>
 
   <main>
     <section id="home"></section>
+    <section id="progress" hidden></section>
+    <section id="list" hidden></section>
+    <section id="settings" hidden></section>
 
     <section id="practice" hidden>
+      <div class="pmeta"><span id="pcount"></span><button class="link" id="stop">Stoppen</button></div>
       <div class="pbar"><div id="pfill"></div></div>
-      <div class="pmeta"><span id="pcount"></span><button class="link" id="stop">stoppen</button></div>
       <div class="card">
         <div class="badge" id="pbadge"></div>
         <div class="prompt" id="pprompt"></div>
@@ -35,8 +49,6 @@
     </section>
 
     <section id="done" hidden></section>
-
-    <section id="list" hidden></section>
   </main>
 
   <script src="data/words.js"></script>

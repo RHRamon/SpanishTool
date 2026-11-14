@@ -341,9 +341,8 @@
     if (st.learn || st.b <= 1) return 1;
     return st.b === 2 ? 2 : st.b <= 4 ? 3 : st.b <= 6 ? 4 : 5;
   }
-  const DOTS = n => '●'.repeat(n) + '○'.repeat(5 - n);
   const SCORE_NL = EN ? ['new', 'weak', 'shaky', 'okay', 'good', 'strong'] : ['nieuw', 'zwak', 'matig', 'redelijk', 'goed', 'sterk'];
-  const dotsHtml = n => `<span class="dots s${n}" title="${tr('Kenniscijfer', 'Knowledge score')}: ${SCORE_NL[n]}">${DOTS(n)}</span>`;
+  const dotsHtml = n => `<span class="dots" title="${tr('Kenniscijfer', 'Knowledge score')}: ${SCORE_NL[n]}">${[1, 2, 3, 4, 5].map(i => `<i class="t${i <= n ? ' s' + n : ''}"></i>`).join('')}</span>`;
   // leerfase-kaarten zijn op de minuut gepland, de rest per dag
   const isDue = (st, t, nw) => st.learn ? (st.dueAt || 0) <= nw : st.due <= t;
   // zwak = nog in de leerfase, of de laatste keer fout
@@ -447,8 +446,8 @@
       return {
         badge: tr('Luisteren · ', 'Listening · ') + it.cat, listen: true,
         prompt: `<button class="bigsay" id="bigsay" title="${tr('Nog een keer (Tab)', 'Again (Tab)')}" aria-label="${tr('Nog een keer afspelen', 'Play again')}">${SPEAKER}</button>`,
-        sub: tr('Wat betekent het? <span class="muted">· <kbd>Tab</kbd> nog een keer, langzamer</span>',
-                'What does it mean? <span class="muted">· <kbd>Tab</kbd> again, slower</span>'),
+        sub: tr('Wat betekent het? <span class="muted"><kbd>Tab</kbd> nog een keer, langzamer</span>',
+                'What does it mean? <span class="muted"><kbd>Tab</kbd> again, slower</span>'),
         answers: nl, lang: NATIVE, say: es[0], sayFirst: true,
         reveal: `${esc(it.es)} <i>=</i> ${nl.map(esc).join(' <i>/</i> ')}`, list: `🔊 ${esc(it.es)}`,
       };
@@ -499,7 +498,7 @@
     speechSynthesis.onvoiceschanged = () => {
       pickVoice();
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
-      if (!$('#home').hidden && !typing) renderHome();
+      if ((current === 'home' || current === 'settings') && !typing) rerender();
     };
   }
   function speak(text, force, rate) {
@@ -513,40 +512,61 @@
   }
 
   // ---------- schermen ----------
-  const SCREENS = ['home', 'practice', 'done', 'list'];
+  // Vier tabbladen (Vandaag, Voortgang, Woordenlijst, Instellingen) plus het oefenen en het eindscherm.
+  const SCREENS = ['home', 'progress', 'list', 'settings', 'practice', 'done'];
+  let current = 'home', openOpt = null;
   function show(id) {
+    current = id;
     for (const s of SCREENS) $('#' + s).hidden = s !== id;
+    document.body.classList.toggle('drilling', id === 'practice' || id === 'done');
+    for (const b of document.querySelectorAll('[data-nav]')) {
+      if (b.dataset.nav === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    }
     vtip.hidden = true;
     renderTop();
     window.scrollTo(0, 0);
   }
-  function goHome() { renderHome(); show('home'); }
+  function render(id) {
+    if (id === 'home') renderHome();
+    else if (id === 'progress') renderProgress();
+    else if (id === 'settings') renderSettings();
+    else if (id === 'list') renderList();
+  }
+  function go(id) { if (id === 'list') editKey = null; render(id); show(id); }
+  function goHome() { go('home'); }
+  // opnieuw tekenen na een wijziging, zonder weg te springen
+  function rerender() { const y = window.scrollY; render(current); renderTop(); window.scrollTo(0, y); }
+
   function renderTop() {
     const L = S.log[today()] || { reviews: 0 }, st = streak();
-    $('#topstats').innerHTML = (EN
-      ? `<span title="Days practised in a row"><b>${st}</b> day streak</span><span title="Answered today"><b>${L.reviews}</b> today</span>`
-      : `<span title="Dagen op rij geoefend"><b>${st}</b> ${st === 1 ? 'dag' : 'dagen'} op rij</span><span title="Vandaag beantwoord"><b>${L.reviews}</b> vandaag</span>`)
-      + '<span id="sync"></span>';
+    const days = EN ? (st === 1 ? 'day' : 'days') : (st === 1 ? 'dag' : 'dagen');
+    $('#topstats').innerHTML =
+      `<span class="streak ${st ? 'on' : ''}" title="${tr('Dagen op rij geoefend', 'Days practised in a row')}"><b>${st}</b> ${days}</span>` +
+      `<span title="${tr('Vandaag beantwoord', 'Answered today')}"><b>${L.reviews}</b> ${tr('vandaag', 'today')}</span><span id="sync"></span>`;
     renderSync();
   }
 
-  function statLine(s) {
-    return `<div class="statrow">
-      <div><b>${s.due}</b><span>${tr('nu herhalen', 'to review now')}</span></div>
-      <div><b>${s.shaky}</b><span>${tr('nog zwak', 'still weak')}</span></div>
-      <div><b>${s.learned}</b><span>${tr(`van ${s.total} geleerd`, `of ${s.total} learned`)}</span></div>
-    </div>`;
-  }
-  function startButton(kind, st, label, empty, locked) {
-    if (plan(kind).count) return `<button class="start secondary" data-start="${kind}">${label}</button>`;
-    const label2 = !st.total ? empty : locked && st.unseen ? locked : tr('Alles staat stevig ✓', 'Everything is solid ✓');
-    return `<button class="start secondary" disabled>${label2}</button>`;
-  }
+  // kenniscijfer als rijtje tegeltjes
+  const tile = s => `<i class="t s${s}"></i>`;
   function distHtml(st) {
     if (!(st.d1 + st.d2 + st.d3 + st.d4 + st.d5)) return '';
-    return `<div class="dist">${[1, 2, 3, 4, 5].map(i =>
-      `<span class="s${i}"><i>${DOTS(i)}</i> ${SCORE_NL[i]} <b>${st['d' + i]}</b></span>`).join('')}</div>`;
+    return `<div class="mlegend">${[5, 4, 3, 2, 1].map(i => `<span>${tile(i)}${SCORE_NL[i]} <b>${st['d' + i]}</b></span>`).join('')}</div>`;
   }
+
+  // De tegelwand: elke kaart die je al eens gezien hebt is een tegel, hoe donkerder hoe beter je hem kent.
+  function mosaic() {
+    const counts = [0, 0, 0, 0, 0, 0], tiles = [];
+    for (const st of Object.values(S.cards)) { const s = score(st); if (s) { counts[s]++; tiles.push(s); } }
+    if (!tiles.length) return `<div class="mosaic-empty">${tr(
+      'Elke kaart die je leert wordt hier een tegel. Hoe beter je hem kent, hoe dieper het blauw.',
+      'Every card you learn becomes a tile here. The better you know it, the deeper the blue.')}</div>`;
+    tiles.sort((a, b) => b - a);
+    const size = tiles.length > 1400 ? 'xs' : tiles.length > 600 ? 'sm' : '';
+    const label = [5, 4, 3, 2, 1].map(i => `${SCORE_NL[i]}: ${counts[i]}`).join(', ');
+    return `<div class="mosaic ${size}" role="img" aria-label="${esc(label)}">${tiles.map(tile).join('')}</div>
+      <div class="mlegend">${[5, 4, 3, 2, 1].map(i => `<span>${tile(i)}${SCORE_NL[i]} <b>${counts[i]}</b></span>`).join('')}</div>`;
+  }
+
   // ---------- voortgang ----------
   // Elke dag wordt bewaard hoeveel kaarten je op elk kenniscijfer hebt (log[dag].dist = [zwak … sterk]).
   function snapshot() {
@@ -566,9 +586,9 @@
   const rtop = (x, y, w, h, r) => `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
   // cols: per dag de segmenten van onder naar boven (null = geen gegevens), colors: css-variabele per segment
   function barChart(cols, days, colors, tips, label) {
-    const W = 720, H = 160, L = 36, B = 22, T = 8, n = cols.length;
+    const W = 720, H = 170, L = 36, B = 22, T = 8, n = cols.length;
     const max = Math.max(1, ...cols.map(c => c ? sum(c) : 0)), step = niceStep(max), top = Math.ceil(max / step) * step;
-    const slot = (W - L) / n, bw = Math.min(24, slot * 0.7);
+    const slot = (W - L) / n, bw = Math.min(16, slot * 0.62);
     const y = v => T + (H - T - B) * (1 - v / top);
     let g = '';
     for (let v = 0; v <= top; v += step)
@@ -582,7 +602,7 @@
           const y0 = y(acc), y1 = y(acc + s.v); acc += s.v;
           const h = Math.max(0, y0 - y1 - (j ? 2 : 0)); // 2px ruimte tussen segmenten
           g += j === segs.length - 1
-            ? `<path d="${rtop(x, y1, bw, h, Math.min(4, h, bw / 2))}" fill="var(${colors[s.k]})"/>`
+            ? `<path d="${rtop(x, y1, bw, h, Math.min(3, h, bw / 2))}" fill="var(${colors[s.k]})"/>`
             : `<rect x="${x}" y="${y1}" width="${bw}" height="${h}" fill="var(${colors[s.k]})"/>`;
         });
       }
@@ -592,7 +612,7 @@
       g += `<text x="${L + slot * (i + 0.5)}" y="${H - 5}" class="xt">${i === n - 1 ? tr('vandaag', 'today') : dayLabel(days[i])}</text>`;
     return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="${esc(label)}">${g}</svg>`;
   }
-  function progressPanel() {
+  function renderProgress() {
     snapshot();
     const t = today(), N = 30, days = [];
     for (let i = N - 1; i >= 0; i--) days.push(t - i);
@@ -600,7 +620,7 @@
     let last = null;
     const dist = days.map(x => { const L = S.log[x]; if (L && L.dist) last = L.dist; return last; });
     const first = Math.min(dist.findIndex(Boolean), N - 7);
-    const kd = days.slice(first), kdist = dist.slice(first);
+    const kd = days.slice(first < 0 ? N - 7 : first), kdist = dist.slice(first < 0 ? N - 7 : first);
     const known = d => d ? d[2] + d[3] + d[4] : 0;
     const now = dist[N - 1], weekAgo = dist[N - 8];
     let rev = 0, cor = 0;
@@ -610,42 +630,63 @@
       kdist.map((d, i) => `${dayLabel(kd[i])}\n` + (d ? [4, 3, 2, 1, 0].map(k => `${SCORE_NL[k + 1]}: ${d[k]}`).join('\n') : tr('nog niet gemeten', 'not measured yet'))),
       tr('Aantal kaarten per kenniscijfer per dag', 'Number of cards per knowledge score per day'));
     const acts = days.map(x => S.log[x] && S.log[x].reviews ? [S.log[x].reviews] : null);
-    const aChart = barChart(acts, days, ['--k3'], days.map((x, i) => {
+    const aChart = barChart(acts, days, ['--k4'], days.map(x => {
       const L = S.log[x]; if (!L || !L.reviews) return `${dayLabel(x)}\n${tr('niet geoefend', 'no practice')}`;
       return `${dayLabel(x)}\n${L.reviews} ${tr('antwoorden', 'answers')}\n${Math.round(100 * (L.correct || 0) / L.reviews)}% ${tr('goed', 'correct')}`;
     }), tr('Aantal antwoorden per dag', 'Number of answers per day'));
     const grow = weekAgo ? known(now) - known(weekAgo) : null;
-    return `
-    <section class="panel progress">
-      <div class="phead"><h2>${tr('Voortgang', 'Progress')}</h2></div>
-      <div class="statrow">
-        <div><b>${known(now)}</b><span>${tr('kaarten ken je redelijk of beter', 'cards you know okay or better')}${grow !== null ? ` · <em class="up">${grow >= 0 ? '+' : ''}${grow} ${tr('in 7 dagen', 'in 7 days')}</em>` : ''}</span></div>
-        <div><b>${rev}</b><span>${tr('antwoorden, laatste 7 dagen', 'answers, last 7 days')}</span></div>
-        <div><b>${rev ? Math.round(100 * cor / rev) + '%' : '–'}</b><span>${tr('goed, laatste 7 dagen', 'correct, last 7 days')}</span></div>
+    const growTxt = grow === null ? '' : `<em class="${grow < 0 ? 'down' : ''}">${grow >= 0 ? '+' : ''}${grow} ${tr('in 7 dagen', 'in 7 days')}</em>`;
+    $('#progress').innerHTML = `
+      <header class="pagehead"><h1>${tr('Voortgang', 'Progress')}</h1></header>
+      <div class="figures">
+        <div><b>${known(now)}</b><span>${tr('kaarten ken je redelijk of beter', 'cards you know okay or better')} ${growTxt}</span></div>
+        <div><b>${rev}</b><span>${tr('antwoorden in de laatste 7 dagen', 'answers in the last 7 days')}</span></div>
+        <div><b>${rev ? Math.round(100 * cor / rev) + '%' : '–'}</b><span>${tr('goed in de laatste 7 dagen', 'correct in the last 7 days')}</span></div>
       </div>
-      <div class="charts">
-        <div>
-          <h3>${tr('Hoe goed je je kaarten kent', 'How well you know your cards')}</h3>
-          <div class="legend">${[5, 4, 3, 2, 1].map(i => `<span><i style="background:var(--k${i})"></i>${SCORE_NL[i]}</span>`).join('')}</div>
-          ${kChart}
-          ${kdist.filter(Boolean).length < 2 ? `<p class="muted small">${tr('De app houdt dit sinds vandaag bij. Elke dag dat je oefent komt er een staaf bij; zie het blauw onderin groeien.',
-            'The app has been tracking this since today. Every day you practise adds a bar; watch the blue at the bottom grow.')}</p>` : ''}
-        </div>
-        <div>
-          <h3>${tr('Antwoorden per dag', 'Answers per day')}</h3>
-          <div class="legend"><span class="muted">${tr('beweeg over een staaf voor het percentage goed', 'hover over a bar to see the percentage correct')}</span></div>
-          ${aChart}
-        </div>
-      </div>
-    </section>`;
+      <section class="sheet">
+        <h2>${tr('Hoe goed je je kaarten kent', 'How well you know your cards')}</h2>
+        <div class="mlegend">${[5, 4, 3, 2, 1].map(i => `<span>${tile(i)}${SCORE_NL[i]}</span>`).join('')}</div>
+        ${kChart}
+        ${kdist.filter(Boolean).length < 2 ? `<p class="note">${tr('Elke dag dat je oefent komt er een staaf bij. Kijk hoe het donkere blauw onderin groeit.',
+          'Every day you practise adds a bar. Watch the dark blue at the bottom grow.')}</p>` : ''}
+      </section>
+      <section class="sheet">
+        <h2>${tr('Antwoorden per dag', 'Answers per day')}</h2>
+        <p class="note">${tr('Beweeg over een staaf om te zien hoeveel procent goed was.', 'Hover over a bar to see the percentage correct.')}</p>
+        ${aChart}
+      </section>`;
   }
 
+  // ---------- vandaag ----------
   function planLine(pl) {
     const parts = [];
     if (pl.old.length) parts.push(`<b>${pl.old.length}</b> ${tr('herhalen', 'to review')}`);
     parts.push(`<b>${pl.fresh.length}</b> ${tr('nieuw', 'new')}`);
-    if (pl.extra.length) parts.push(`<b>${pl.extra.length}</b> ${tr('zwakke extra', 'weak extra')}`);
-    return parts.join(' · ');
+    if (pl.extra.length) parts.push(`<b>${pl.extra.length}</b> ${tr('zwakke extra', 'weak ones extra')}`);
+    return parts.join(', ');
+  }
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+
+  // één regel in "Eén ding oefenen", met de keuzes ingeklapt
+  function modeRow(kind, key, title, st, opts, blocked) {
+    const open = openOpt === kind, can = plan(kind).count > 0;
+    const pct = st.total ? Math.round(100 * st.learned / st.total) : 0;
+    const facts = !st.total ? blocked
+      : tr(`${st.learned} van ${st.total} geleerd`, `${st.learned} of ${st.total} learned`)
+        + (st.due ? tr(`, ${st.due} te herhalen`, `, ${st.due} to review`) : '')
+        + (!can ? (blocked && st.unseen ? `. ${blocked}` : tr('. Alles staat stevig.', '. Everything is solid.')) : '');
+    return `<div class="mode ${open ? 'open' : ''}">
+      <div class="mhead">
+        <kbd class="mkey" title="${tr('Sneltoets', 'Shortcut')}">${key}</kbd>
+        <div class="mtitle"><h3>${title}</h3><p>${facts}</p>
+          <div class="meter" aria-hidden="true"><i style="width:${pct}%"></i></div></div>
+        <div class="mact">
+          <button class="btn quiet" data-opt="${kind}" aria-expanded="${open}">${tr('Opties', 'Options')}</button>
+          <button class="btn solid" data-start="${kind}" ${can ? '' : 'disabled'}>${tr('Oefenen', 'Practise')}</button>
+        </div>
+      </div>
+      ${open ? `<div class="mopts">${opts}</div>` : ''}
+    </div>`;
   }
 
   function renderHome() {
@@ -658,129 +699,141 @@
     const tenseStatus = t => tenseOn(t) ? `<em class="${countMastered(vm, t) ? 'done' : 'wait'}" title="${tr('Zoveel werkwoorden ken je in deze tijd', 'Number of verbs you know in this tense')}">${countMastered(vm, t)} ${VW}</em>` : '';
     const hard = hardCards();
     const setCount = {}; for (const x of SENTENCES) setCount[x.set] = (setCount[x.set] || 0) + 1;
-    const vlist = esVoices();
-
     const pl = plan('all');
-    $('#home').innerHTML = `
-    <section class="panel hero">
-      <div>
-        <h2>${tr('Volgende ronde', 'Next round')}</h2>
-        <p>${pl.count ? planLine(pl) + ` <span class="muted">· ${tr('alles door elkaar', 'all mixed')}</span>` : tr('Alles staat stevig. ¡Muy bien!', 'Everything is solid. ¡Muy bien!')}</p>
-        <p class="forecast muted">${tr('Nieuw', 'New')}: ${esc(pl.budget.why)}</p>
-        <p class="forecast muted">${tr('Herhalingen morgen', 'Reviews tomorrow')} <b>${all.tomorrow}</b> · ${tr('komende 7 dagen', 'next 7 days')} <b>${all.week}</b></p>
+    const seen = Object.keys(S.cards).length;
+
+    const wordOpts = `
+      <h4>${tr('Richting', 'Direction')}</h4>
+      <div class="chips">${Object.entries(DIRS).map(([d, l]) =>
+        `<button class="chip ${s.dirs[d] ? 'on' : ''}" data-dirtoggle="${d}" aria-pressed="${!!s.dirs[d]}">${l}</button>`).join('')}</div>
+      <h4>${tr('Onderwerpen', 'Topics')} <span class="inline"><button class="link" data-allcats="1">${tr('alles aan', 'all on')}</button>
+        <button class="link" data-allcats="0">${tr('alles uit', 'all off')}</button></span></h4>
+      <div class="chips">${cats.map(c => `<button class="chip ${catOn(c) ? 'on' : ''}" data-cat="${esc(c)}" aria-pressed="${catOn(c)}">${esc(c)} <i>${countBy[c]}</i></button>`).join('')}</div>
+      <p class="note"><button class="link" data-nav="list">${tr('Woordenlijst bekijken, bewerken of je eigen lijst toevoegen', 'View or edit the word list, or add your own')}</button></p>`;
+
+    const verbOpts = `
+      <h4>${tr('Tijden', 'Tenses')}</h4>
+      <div class="tenses">
+        <div class="tense on fixed"><input type="checkbox" checked disabled><b>${tr('Betekenis', 'Meaning')}</b><span>${tr('altijd eerst: opstaan → levantarse', 'always first: to get up → levantarse')}</span><em class="${countMastered(vm, 'inf') ? 'done' : 'wait'}">${countMastered(vm, 'inf')} ${tr('van', 'of')} ${nVerbs}</em></div>
+        ${TENSE_KEYS.map(t => `
+        <label class="tense ${tenseOn(t) ? 'on' : ''}"><input type="checkbox" data-tense="${t}" ${tenseOn(t) ? 'checked' : ''}>
+          <b>${TENSES[t].label}</b><span>${esc(tenseDesc(t))}</span>${tenseStatus(t)}</label>`).join('')}
       </div>
-      ${pl.count ? `<button class="start" data-start="all">${tr('Ga verder met leren', 'Continue learning')} <kbd>Enter</kbd></button>` : ''}
-      ${distHtml(all)}
-    </section>
-    ${progressPanel()}
-    <div class="grid">
-      <section class="panel">
-        <div class="phead"><h2>${tr('Woorden', 'Words')}</h2><span class="key">1</span></div>
-        ${statLine(ws)}
-        <div class="chips dirs">${Object.entries(DIRS).map(([d, l]) =>
-          `<button class="chip ${s.dirs[d] ? 'on' : ''}" data-dirtoggle="${d}">${d === 'listen' ? '🔊 ' : ''}${l}</button>`).join('')}</div>
-        <div class="chips">${cats.map(c => `<button class="chip ${catOn(c) ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)} <i>${countBy[c]}</i></button>`).join('')}</div>
-        <div class="minor"><button class="link" data-allcats="1">${tr('alles aan', 'all on')}</button> · <button class="link" data-allcats="0">${tr('alles uit', 'all off')}</button> · <button class="link" id="openlist">${tr('woordenlijst bekijken &amp; bewerken', 'view &amp; edit word list')}</button></div>
-        ${startButton('words', ws, tr('Alleen woorden', 'Words only'), tr('Kies een richting en categorie', 'Choose a direction and category'))}
-      </section>
+      <h4>${tr('Welke werkwoorden', 'Which verbs')}</h4>
+      <div class="chips">
+        <button class="chip ${s.groups.gewoon ? 'on' : ''}" data-group="gewoon" aria-pressed="${!!s.groups.gewoon}">${tr('Gewone werkwoorden', 'Regular verbs')} <i>${window.VERBS.filter(v => !v.refl).length}</i></button>
+        <button class="chip ${s.groups.refl ? 'on' : ''}" data-group="refl" aria-pressed="${!!s.groups.refl}">${tr('Wederkerend (me levanto)', 'Reflexive (me levanto)')} <i>${window.VERBS.filter(v => v.refl).length}</i></button>
+      </div>
+      <label class="toggle"><input type="checkbox" data-set="stepwise" ${s.stepwise ? 'checked' : ''}>
+        <span>${tr('Stap voor stap', 'Step by step')}<small>${tr('Een nieuwe tijd pas als je de vorige van dát werkwoord kent', 'A new tense only once you know the previous one for that verb')}</small></span></label>
+      <label class="toggle"><input type="checkbox" id="vosotros" ${s.vosotros ? 'checked' : ''}>
+        <span>${tr('Vosotros meenemen', 'Include vosotros')}<small>${tr('Wordt alleen in Spanje gebruikt', 'Only used in Spain')}</small></span></label>`;
 
-      <section class="panel">
-        <div class="phead"><h2>${tr('Werkwoorden vervoegen', 'Verb conjugation')}</h2><span class="key">2</span></div>
-        ${statLine(vs)}
-        <div class="tenses">
-          <div class="tense on fixed"><input type="checkbox" checked disabled><b>${tr('Betekenis', 'Meaning')}</b><span>${tr('altijd eerst · opstaan → levantarse', 'always first · to get up → levantarse')}</span><em class="${countMastered(vm, 'inf') ? 'done' : 'wait'}">${countMastered(vm, 'inf')} ${tr('van', 'of')} ${nVerbs} ${VW}</em></div>
-          ${TENSE_KEYS.map(t => `
-          <label class="tense ${tenseOn(t) ? 'on' : ''}"><input type="checkbox" data-tense="${t}" ${tenseOn(t) ? 'checked' : ''}>
-            <b>${TENSES[t].label}</b><span>${esc(tenseDesc(t))}</span>${tenseStatus(t)}</label>`).join('')}
+    const locked = Object.keys(window.SENTENCE_SETS).filter(x => SENT_RULES[x] && !SENT_RULES[x].open(vm));
+    const sentOpts = `
+      <p class="note">${tr('Vul het ontbrekende woord in. Bij een fout zie je waaróm het zo moet.', 'Fill in the missing word. If you get it wrong, you see why.')}</p>
+      <div class="chips">${Object.keys(window.SENTENCE_SETS).map(x =>
+        `<button class="chip ${setOn(x) ? 'on' : ''}" data-sset="${esc(x)}" aria-pressed="${setOn(x)}">${esc(setName(x))} <i>${setCount[x]}</i></button>`).join('')}</div>
+      ${locked.length ? `<ul class="locks">${locked.map(x => `<li><b>${esc(setName(x))}</b> ${esc(SENT_RULES[x].lock(vm))}</li>`).join('')}</ul>` : ''}`;
+
+    const hardOpts = `
+      <p class="note">${tr('Ze verdwijnen vanzelf van deze lijst als je ze een paar keer op rij goed hebt. Extra oefenen verandert je planning niet.',
+        'They drop off this list once you get them right a few times in a row. Extra practice doesn\'t change your schedule.')}</p>
+      <ul class="hardlist">${hard.map(c => { const v = view(c); return `<li><span>${v.list || v.prompt}</span><b>${v.answers.map(esc).join(' / ')}</b><i>${S.cards[c.id].lapses}×</i></li>`; }).join('')}</ul>`;
+
+    $('#home').innerHTML = `
+      <section class="today">
+        <div>
+          <h1>${pl.count ? tr('Volgende ronde', 'Next round') : tr('Klaar voor vandaag', 'Done for today')}</h1>
+          <p class="plan">${pl.count ? planLine(pl) : tr('Alles staat stevig. ¡Hasta mañana!', 'Everything is solid. ¡Hasta mañana!')}</p>
+          <p class="note">${esc(cap(pl.budget.why))}. ${tr(`Morgen ${all.tomorrow} herhalingen, deze week ${all.week}.`, `Tomorrow ${all.tomorrow} reviews, this week ${all.week}.`)}</p>
         </div>
-        <label class="toggle"><input type="checkbox" data-set="stepwise" ${s.stepwise ? 'checked' : ''}> ${tr('Stap voor stap <span class="muted">(een tijd pas als je de vorige van dát werkwoord kent)</span>',
-          'Step by step <span class="muted">(a tense only once you know the previous one for that verb)</span>')}</label>
-        <div class="chips groups">
-          <button class="chip ${s.groups.gewoon ? 'on' : ''}" data-group="gewoon">${tr('Gewone werkwoorden', 'Regular verbs')} <i>${window.VERBS.filter(v => !v.refl).length}</i></button>
-          <button class="chip ${s.groups.refl ? 'on' : ''}" data-group="refl">${tr('Wederkerend', 'Reflexive')} · me levanto <i>${window.VERBS.filter(v => v.refl).length}</i></button>
+        ${pl.count ? `<button class="go" data-start="all">${tr('Start ronde', 'Start round')} <kbd>Enter</kbd></button>` : ''}
+      </section>
+
+      <section class="wall">
+        <h2>${seen ? tr(`Je tegelwand: ${seen} kaarten`, `Your tile wall: ${seen} cards`) : tr('Je tegelwand', 'Your tile wall')}</h2>
+        ${mosaic()}
+      </section>
+
+      <section class="modes">
+        <h2>${tr('Eén ding oefenen', 'Practise one thing')}</h2>
+        <div class="sheet flush">
+          ${modeRow('words', 1, tr('Woorden', 'Words'), ws, wordOpts, tr('Kies een richting en een onderwerp.', 'Choose a direction and a topic.'))}
+          ${modeRow('verbs', 2, tr('Werkwoorden vervoegen', 'Verb conjugation'), vs, verbOpts, tr('Kies minstens één tijd en groep.', 'Choose at least one tense and group.'))}
+          ${modeRow('sentences', 3, tr('Zinnen invullen', 'Fill in the blank'), ss, sentOpts,
+            locked.length === Object.keys(window.SENTENCE_SETS).length ? tr('Gaat open zodra je genoeg vervoegingen kent.', 'Unlocks once you know enough conjugations.') : tr('Kies minstens één set.', 'Choose at least one set.'))}
+          ${hard.length ? `<div class="mode ${openOpt === 'hard' ? 'open' : ''}">
+            <div class="mhead">
+              <span class="mkey hardcount">${hard.length}</span>
+              <div class="mtitle"><h3>${tr('Moeilijke woorden', 'Difficult words')}</h3><p>${tr('Kaarten die je minstens twee keer fout had', 'Cards you got wrong at least twice')}</p></div>
+              <div class="mact">
+                <button class="btn quiet" data-opt="hard" aria-expanded="${openOpt === 'hard'}">${tr('Bekijken', 'View')}</button>
+                <button class="btn solid" data-start="hard">${tr('Oefenen', 'Practise')}</button>
+              </div>
+            </div>
+            ${openOpt === 'hard' ? `<div class="mopts">${hardOpts}</div>` : ''}
+          </div>` : ''}
         </div>
-        <label class="toggle"><input type="checkbox" id="vosotros" ${s.vosotros ? 'checked' : ''}> ${tr('vosotros meenemen <span class="muted">(alleen gebruikt in Spanje)</span>', 'include vosotros <span class="muted">(only used in Spain)</span>')}</label>
-        ${startButton('verbs', vs, tr('Alleen vervoegingen', 'Conjugations only'), tr('Kies minstens één tijd en groep', 'Choose at least one tense and group'))}
-      </section>
-
-      <section class="panel">
-        <div class="phead"><h2>${tr('Zinnen invullen', 'Fill in the blank')}</h2><span class="key">3</span></div>
-        ${statLine(ss)}
-        <p class="muted small">${tr('Vul het ontbrekende woord in. Bij een fout zie je waaróm het zo moet.', 'Fill in the missing word. If you get it wrong, you\'ll see why.')}</p>
-        <div class="chips">${Object.keys(window.SENTENCE_SETS).map(x =>
-          `<button class="chip ${setOn(x) ? 'on' : ''}" data-sset="${esc(x)}">${SENT_RULES[x] && !SENT_RULES[x].open(vm) ? '🔒 ' : ''}${esc(setName(x))} <i>${setCount[x]}</i></button>`).join('')}</div>
-        <ul class="locks">${Object.keys(window.SENTENCE_SETS).filter(x => setOn(x) && SENT_RULES[x] && !SENT_RULES[x].open(vm))
-          .map(x => `<li><b>${esc(setName(x))}</b> ${esc(SENT_RULES[x].lock(vm))}</li>`).join('')}</ul>
-        ${startButton('sentences', ss, tr('Alleen zinnen', 'Sentences only'), tr('Kies minstens één set', 'Choose at least one set'), tr('Nog op slot · eerst de vervoegingen', 'Still locked · conjugations first'))}
-      </section>
-
-      <section class="panel">
-        <div class="phead"><h2>${tr('Moeilijke woorden', 'Difficult words')}</h2><span class="muted small">${hard.length}</span></div>
-        ${hard.length ? `
-          <p class="muted small">${tr('Kaarten die je vaak fout doet. Ze verdwijnen vanzelf uit dit lijstje als je ze een paar keer op rij goed hebt.',
-            'Cards you often get wrong. They drop off this list once you get them right a few times in a row.')}</p>
-          <ul class="hardlist">${hard.map(c => { const v = view(c); return `<li><span>${v.list || v.prompt}</span><b>${v.answers.map(esc).join(' / ')}</b><i>${S.cards[c.id].lapses}×</i></li>`; }).join('')}</ul>
-          <button class="start secondary" data-start="hard">${tr('Extra oefenen', 'Extra practice')}</button>
-          <p class="muted small">${tr('Extra oefenen telt niet mee voor je planning: goed laat alles zoals het was, fout zet de kaart terug in de leerfase.',
-            'Extra practice doesn\'t affect your schedule: right leaves everything as it was, wrong puts the card back in the learning phase.')}</p>`
-        : `<p class="muted small">${tr('Nog niets. Kaarten die je minstens twee keer fout hebt gedaan komen hier te staan, zodat je ze gericht kunt oefenen.',
-            'Nothing yet. Cards you\'ve got wrong at least twice show up here, so you can practise them on purpose.')}</p>`}
-      </section>
-
-      <section class="panel">
-        <div class="phead"><h2>${tr('Eigen lijst toevoegen', 'Add your own list')}</h2></div>
-        <p class="muted small">${tr('Eén woord per regel: <code>nederlands = spaans</code>. Plakken uit Excel (twee kolommen) werkt ook. Meerdere goede antwoorden met <code>/</code>.',
-          'One word per line: <code>english = spanish</code>. Pasting from Excel (two columns) works too. Separate several correct answers with <code>/</code>.')}</p>
-        <input id="cname" placeholder="${tr('Naam van de lijst, bijv. Duolingo unit 12', 'Name of the list, e.g. Duolingo unit 12')}">
-        <textarea id="ctext" rows="5" placeholder="${tr('de hond = el perro&#10;de auto = el coche / el carro', 'the dog = el perro&#10;the car = el coche / el carro')}"></textarea>
-        <div class="row"><button class="btn" id="cadd">${tr('Toevoegen', 'Add')}</button><span id="cmsg" class="muted small"></span></div>
-        ${S.custom.length ? `<ul class="clist">${S.custom.map(c => `<li><span>★ ${esc(c.name)} <i class="muted">${parseList(c.text).length} ${tr('woorden', 'words')}</i></span><button class="link danger" data-del="${c.id}">${tr('verwijderen', 'delete')}</button></li>`).join('')}</ul>` : ''}
-      </section>
-
-      <section class="panel">
-        <div class="phead"><h2>${tr('Instellingen', 'Settings')}</h2></div>
-        <div class="settings">
-          <label>Taal / Language <select id="lang">
-            <option value="nl" ${EN ? '' : 'selected'}>Nederlands</option>
-            <option value="en" ${EN ? 'selected' : ''}>English</option></select></label>
-          <p class="muted small">${tr('Elke taal heeft zijn eigen woordenlijst en voortgang.', 'Each language has its own word list and progress.')}</p>
-          <label>${tr('Tempo nieuwe kaarten', 'Pace of new cards')} <select data-set="pace">
-            ${Object.entries(PACE).map(([k, n]) => `<option value="${k}" ${(s.pace || 'normaal') === k ? 'selected' : ''}>${PACE_NAME[k]} · max ${n} ${tr('per ronde', 'per round')}</option>`).join('')}</select></label>
-          <p class="muted small">${tr(`De app kiest zelf hoeveel nieuwe kaarten je krijgt: het maximum als je bijna alles goed hebt, minder als je vaker fout zit, en geen als er al ${SHAKY_MAX} zwakke kaarten openstaan.`,
-            `The app decides how many new cards you get: the maximum when you get almost everything right, fewer when you make more mistakes, and none when ${SHAKY_MAX} weak cards are already open.`)}</p>
-          <label>${tr('Max kaarten per ronde', 'Max cards per round')} <input type="number" min="5" max="500" data-set="sessionSize" value="${s.sessionSize}"></label>
-          <label>Accent <select data-set="accent">
-            <option value="es-ES" ${s.accent === 'es-ES' ? 'selected' : ''}>${tr('Spanje', 'Spain')}</option>
-            <option value="es-MX" ${s.accent === 'es-MX' ? 'selected' : ''}>${tr('Latijns-Amerika', 'Latin America')}</option></select></label>
-          <label>${tr('Stem', 'Voice')} <span class="voicerow"><select data-set="voice">
-            <option value="">${tr('Automatisch', 'Automatic')}${voice && !s.voice ? ' (' + esc(voice.name) + ')' : ''}</option>
-            ${vlist.map(v => `<option value="${esc(v.voiceURI)}" ${s.voice === v.voiceURI ? 'selected' : ''}>${esc(v.name)} · ${esc(v.lang)}</option>`).join('')}
-          </select><button class="btn" id="testvoice" title="${tr('Test de stem', 'Test the voice')}">▶</button></span></label>
-          ${vlist.length ? (vlist.some(v => /natural/i.test(v.name)) ? '' : `<p class="muted small">${tr('Tip: Microsoft Edge heeft de natuurlijkste Spaanse stemmen (met "Natural" in de naam).', 'Tip: Microsoft Edge has the most natural Spanish voices (with "Natural" in the name).')}</p>`)
-            : `<p class="muted small warnline">${tr('Geen Spaanse stem gevonden. Open de app in Chrome of Edge, of installeer Spaans als taal in Windows.', 'No Spanish voice found. Open the app in Chrome or Edge, or install Spanish as a language in Windows.')}</p>`}
-          <label class="toggle"><input type="checkbox" data-set="speak" ${s.speak ? 'checked' : ''}> ${tr('Antwoord hardop uitspreken', 'Read the answer out loud')}</label>
-          <label class="toggle"><input type="checkbox" data-set="retype" ${s.retype ? 'checked' : ''}> ${tr('Na een fout het antwoord overtypen', 'Retype the answer after a mistake')}</label>
-        </div>
-        <div class="row wrap">
-          <button class="btn ghost" id="export">${tr('Backup downloaden', 'Download backup')}</button>
-          <label class="btn ghost">${tr('Backup terugzetten', 'Restore backup')}<input type="file" id="import" accept=".json" hidden></label>
-          <button class="link danger" id="reset">${tr('voortgang wissen', 'reset progress')}</button>
-        </div>
-      </section>
-    </div>`;
-    columns();
+      </section>`;
   }
-  // Blokken om en om over twee kolommen, zodat ze zonder gaten onder elkaar aansluiten.
-  // Op een smal scherm vallen de kolommen weg en staan de blokken weer in de gewone volgorde.
-  function columns() {
-    const g = $('#home .grid');
-    const cols = [0, 1].map(() => { const c = document.createElement('div'); c.className = 'col'; return c; });
-    [...g.children].forEach((p, i) => { p.style.order = i; cols[i % 2].appendChild(p); });
-    g.append(...cols);
+
+  // ---------- instellingen ----------
+  function renderSettings() {
+    const s = S.settings, vlist = esVoices();
+    const field = (label, control, help) => `<div class="field"><label>${label}${help ? `<small>${help}</small>` : ''}</label>${control}</div>`;
+    $('#settings').innerHTML = `
+      <header class="pagehead"><h1>${tr('Instellingen', 'Settings')}</h1></header>
+
+      <section class="sheet">
+        <h2>${tr('Leren', 'Learning')}</h2>
+        ${field(tr('Tempo nieuwe kaarten', 'Pace of new cards'), `<select data-set="pace">
+          ${Object.entries(PACE).map(([k, n]) => `<option value="${k}" ${(s.pace || 'normaal') === k ? 'selected' : ''}>${PACE_NAME[k]}, max ${n}</option>`).join('')}</select>`,
+          tr(`Het maximum als je bijna alles goed hebt, minder als je vaker fout zit, en geen nieuwe zolang er ${SHAKY_MAX} zwakke kaarten openstaan.`,
+             `The maximum when you get almost everything right, fewer when you make more mistakes, and none while ${SHAKY_MAX} weak cards are open.`))}
+        ${field(tr('Kaarten per ronde', 'Cards per round'), `<input type="number" min="5" max="500" data-set="sessionSize" value="${s.sessionSize}">`)}
+        <label class="toggle"><input type="checkbox" data-set="retype" ${s.retype ? 'checked' : ''}>
+          <span>${tr('Na een fout het antwoord overtypen', 'Retype the answer after a mistake')}</span></label>
+      </section>
+
+      <section class="sheet">
+        <h2>${tr('Geluid', 'Sound')}</h2>
+        <label class="toggle"><input type="checkbox" data-set="speak" ${s.speak ? 'checked' : ''}>
+          <span>${tr('Antwoord hardop uitspreken', 'Read the answer out loud')}</span></label>
+        ${field('Accent', `<select data-set="accent">
+          <option value="es-ES" ${s.accent === 'es-ES' ? 'selected' : ''}>${tr('Spanje', 'Spain')}</option>
+          <option value="es-MX" ${s.accent === 'es-MX' ? 'selected' : ''}>${tr('Latijns-Amerika', 'Latin America')}</option></select>`)}
+        ${field(tr('Stem', 'Voice'), `<span class="voicerow"><select data-set="voice">
+          <option value="">${tr('Automatisch', 'Automatic')}${voice && !s.voice ? ' (' + esc(voice.name) + ')' : ''}</option>
+          ${vlist.map(v => `<option value="${esc(v.voiceURI)}" ${s.voice === v.voiceURI ? 'selected' : ''}>${esc(v.name)}, ${esc(v.lang)}</option>`).join('')}
+        </select><button class="btn quiet" id="testvoice">${tr('Test', 'Test')}</button></span>`,
+          vlist.length ? (vlist.some(v => /natural/i.test(v.name)) ? '' : tr('Microsoft Edge heeft de natuurlijkste Spaanse stemmen, met "Natural" in de naam.', 'Microsoft Edge has the most natural Spanish voices, with "Natural" in the name.'))
+            : `<span class="warnline">${tr('Geen Spaanse stem gevonden. Open de app in Chrome of Edge, of installeer Spaans als taal in Windows.', 'No Spanish voice found. Open the app in Chrome or Edge, or install Spanish as a language in Windows.')}</span>`)}
+      </section>
+
+      <section class="sheet">
+        <h2>Taal / Language</h2>
+        ${field(tr('Taal van de app', 'App language'), `<select id="lang">
+          <option value="nl" ${EN ? '' : 'selected'}>Nederlands</option>
+          <option value="en" ${EN ? 'selected' : ''}>English</option></select>`,
+          tr('Elke taal heeft zijn eigen woordenlijst en voortgang.', 'Each language has its own word list and progress.'))}
+      </section>
+
+      <section class="sheet">
+        <h2>${tr('Je voortgang bewaren', 'Keeping your progress')}</h2>
+        <p class="note">${SERVER ? tr('Je voortgang wordt automatisch opgeslagen in opslag/voortgang.json, met een dagelijkse kopie.', 'Your progress is saved automatically to a file, with a daily copy.')
+          : tr('Je voortgang staat alleen in deze browser. Download af en toe een backup, zodat je hem terug kunt zetten als de browser wordt gewist.',
+               'Your progress is stored only in this browser. Download a backup now and then, so you can restore it if the browser data is cleared.')}</p>
+        <div class="row wrap">
+          <button class="btn solid" id="export">${tr('Backup downloaden', 'Download backup')}</button>
+          <label class="btn quiet">${tr('Backup terugzetten', 'Restore backup')}<input type="file" id="import" accept=".json" hidden></label>
+          <button class="link danger" id="reset">${tr('Voortgang wissen', 'Reset progress')}</button>
+        </div>
+      </section>`;
   }
 
   // ---------- woordenlijst ----------
-  let listQuery = '', listCat = '', editKey = null;
+  let listQuery = '', listCat = '', editKey = null, addOpen = false;
   function itemCards(it) {
     if (it.verbLink) return [S.cards['v|' + it.verbLink + '|inf']].filter(Boolean);
     return Object.keys(DIRS).map(d => S.cards[wordId(it, d)]).filter(Boolean);
@@ -815,20 +868,28 @@
     }).join('');
     const unseenInView = items.filter(it => itemStatus(it)[0] === 'new').length;
     $('#list').innerHTML = `
-      <div class="panel">
-        <div class="phead"><h2>${tr('Woordenlijst', 'Word list')}</h2><button class="btn ghost" id="listback">${tr('Terug', 'Back')} <kbd>Esc</kbd></button></div>
+      <header class="pagehead"><h1>${tr('Woordenlijst', 'Word list')}</h1>
+        <p class="note">${tr('"Ken ik al" schuift een woord 30 dagen vooruit. Daarna komt het nog één keer terug ter controle.', '"Already know" moves a word 30 days ahead. After that it comes back once as a check.')}</p></header>
+      <details class="sheet addlist" ${addOpen ? 'open' : ''}>
+        <summary><h2>${tr('Eigen lijst toevoegen', 'Add your own list')}</h2>${S.custom.length ? ` <span class="note">${S.custom.length} ${tr('eigen', 'added')}</span>` : ''}</summary>
+        <p class="note">${tr('Eén woord per regel: <code>nederlands = spaans</code>. Plakken uit Excel (twee kolommen) werkt ook. Meerdere goede antwoorden scheid je met <code>/</code>.',
+          'One word per line: <code>english = spanish</code>. Pasting two columns from Excel works too. Separate several correct answers with <code>/</code>.')}</p>
+        <input id="cname" placeholder="${tr('Naam van de lijst, bijvoorbeeld Duolingo unit 12', 'Name of the list, for example Duolingo unit 12')}">
+        <textarea id="ctext" rows="5" placeholder="${tr('de hond = el perro&#10;de auto = el coche / el carro', 'the dog = el perro&#10;the car = el coche / el carro')}"></textarea>
+        <div class="row"><button class="btn solid" id="cadd">${tr('Lijst toevoegen', 'Add list')}</button><span id="cmsg" class="note"></span></div>
+        ${S.custom.length ? `<ul class="clist">${S.custom.map(c => `<li><span>★ ${esc(c.name)} <i>${parseList(c.text).length} ${tr('woorden', 'words')}</i></span><button class="link danger" data-del="${c.id}">${tr('Verwijderen', 'Delete')}</button></li>`).join('')}</ul>` : ''}
+      </details>
+      <section class="sheet">
         <div class="listbar">
-          <input id="lq" placeholder="${tr('Zoeken in Nederlands of Spaans…', 'Search in English or Spanish…')}" value="${esc(listQuery)}">
-          <select id="lcat"><option value="">${tr('Alle categorieën', 'All categories')}</option>${categories().map(c => `<option ${c === listCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+          <input id="lq" type="search" placeholder="${tr('Zoeken in Nederlands of Spaans', 'Search in English or Spanish')}" value="${esc(listQuery)}">
+          <select id="lcat"><option value="">${tr('Alle onderwerpen', 'All topics')}</option>${categories().map(c => `<option ${c === listCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
         </div>
-        <p class="muted small">${items.length} ${tr('woorden', 'words')}${items.length > MAX ? tr(` (eerste ${MAX} getoond)`, ` (first ${MAX} shown)`) : ''}.
-          ${tr('"Ken ik al" schuift een woord 30 dagen vooruit; daarna komt het nog één keer terug ter controle.', '"Already know" pushes a word 30 days ahead; after that it comes back once more as a check.')}
-          ${unseenInView ? `<button class="link" id="bulkknown">${tr(`Alle ${unseenInView} nieuwe woorden hieronder: ken ik al`, `Mark all ${unseenInView} new words below as already known`)}</button>` : ''}</p>
+        <p class="note">${items.length} ${tr('woorden', 'words')}${items.length > MAX ? tr(`, de eerste ${MAX} staan hieronder`, `, the first ${MAX} are shown`) : ''}.
+          ${unseenInView ? `<button class="link" id="bulkknown">${tr(`Markeer alle ${unseenInView} nieuwe woorden hieronder als "ken ik al"`, `Mark all ${unseenInView} new words below as already known`)}</button>` : ''}</p>
         <div class="tablewrap"><table class="wl"><thead><tr><th>${tr('Nederlands', 'English')}</th><th>${tr('Spaans', 'Spanish')}</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-      </div>`;
+      </section>`;
     if (keepFocus) { const el = $('#lq'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
   }
-  function openList() { editKey = null; renderList(); show('list'); $('#lq').focus(); }
 
   // ---------- oefensessie ----------
   let sess = null;
@@ -1016,21 +1077,21 @@
     const rows = s.wrong.map(c => { const v = view(c); return `<li><span>${v.list || v.prompt}</span><b>${v.answers.map(esc).join(' / ')}</b></li>`; }).join('');
     const nx = s.kind === 'hard' ? null : plan(s.kind);
     $('#done').innerHTML = `
-      <div class="panel donebox">
+      <div class="sheet donebox">
         <h2>${s.queue.length ? tr('Gestopt', 'Stopped') : '¡Terminado!'}</h2>
-        <div class="statrow big">
+        <div class="figures">
           <div><b>${s.done}</b><span>${tr('kaarten gedaan', 'cards done')}</span></div>
           <div><b>${firstTry}%</b><span>${tr('in één keer goed', 'right first time')}</span></div>
           <div><b>${streak()}</b><span>${tr('dagen op rij', 'day streak')}</span></div>
         </div>
         ${rows ? `<h3>${tr('Deze komen zo nog een keer terug', 'These will come back again soon')}</h3><ul class="wrong">${rows}</ul>` : ''}
-        ${nx && nx.count ? `<p class="nextplan">${tr('Volgende ronde', 'Next round')}: ${planLine(nx)}<br><span class="muted small">${tr('Nieuw', 'New')}: ${esc(nx.budget.why)}</span></p>` : ''}
+        ${nx && nx.count ? `<p class="plan">${tr('Volgende ronde', 'Next round')}: ${planLine(nx)}<br><span class="note">${tr('Nieuw', 'New')}: ${esc(nx.budget.why)}</span></p>` : ''}
         ${nx ? distHtml(nx.st) : ''}
         <div class="row">
-          ${s.kind === 'hard' ? (hardCards().length ? `<button class="start" id="again">${tr('Nog een ronde', 'Another round')} <kbd>Enter</kbd></button>` : '')
-            : nx.count ? `<button class="start" id="again">${tr('Ga verder met leren', 'Continue learning')} <kbd>Enter</kbd></button>`
+          ${s.kind === 'hard' ? (hardCards().length ? `<button class="go" id="again">${tr('Nog een ronde', 'Another round')} <kbd>Enter</kbd></button>` : '')
+            : nx.count ? `<button class="go" id="again">${tr('Ga verder met leren', 'Continue learning')} <kbd>Enter</kbd></button>`
             : `<span class="muted">${tr('Alles staat stevig. ¡Hasta mañana!', 'Everything is solid. ¡Hasta mañana!')}</span>`}
-          <button class="btn ghost" id="home">${tr('Terug', 'Back')} <kbd>Esc</kbd></button>
+          <button class="btn quiet" id="back">${tr('Terug', 'Back')} <kbd>Esc</kbd></button>
         </div>
       </div>`;
     sess = { kind: s.kind, ended: true };
@@ -1075,37 +1136,39 @@
       if (e.key === 'Escape') goHome();
     } else if (!$('#list').hidden && e.key === 'Escape') {
       if (editKey) { editKey = null; renderList(); } else goHome();
-    }
+    } else if ((current === 'progress' || current === 'settings') && e.key === 'Escape' && !typing) goHome();
   });
+  $('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-nav]'); if (b) go(b.dataset.nav); });
 
   $('#done').addEventListener('click', e => {
     if (e.target.closest('#again')) start(sess.kind);
-    if (e.target.closest('#home')) goHome();
+    if (e.target.closest('#back')) goHome();
   });
   $('#brand').addEventListener('click', () => { if (sess && !sess.ended && !$('#practice').hidden) finish(); else goHome(); });
 
-  $('#home').addEventListener('click', e => {
+  $('main').addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
     const d = b.dataset;
     if (d.start) return start(d.start);
-    if (d.group) { S.settings.groups[d.group] = !S.settings.groups[d.group]; save(); return renderHome(); }
-    if (d.dirtoggle) { S.settings.dirs[d.dirtoggle] = !S.settings.dirs[d.dirtoggle]; save(); return renderHome(); }
-    if (d.sset !== undefined) { S.settings.sets[d.sset] = !setOn(d.sset); save(); return renderHome(); }
-    if (d.cat !== undefined) { S.settings.cats[d.cat] = !catOn(d.cat); save(); return renderHome(); }
-    if (d.allcats !== undefined) { for (const c of categories()) S.settings.cats[c] = d.allcats === '1'; save(); return renderHome(); }
-    if (b.id === 'openlist') return openList();
+    if (d.group) { S.settings.groups[d.group] = !S.settings.groups[d.group]; save(); return rerender(); }
+    if (d.dirtoggle) { S.settings.dirs[d.dirtoggle] = !S.settings.dirs[d.dirtoggle]; save(); return rerender(); }
+    if (d.sset !== undefined) { S.settings.sets[d.sset] = !setOn(d.sset); save(); return rerender(); }
+    if (d.cat !== undefined) { S.settings.cats[d.cat] = !catOn(d.cat); save(); return rerender(); }
+    if (d.allcats !== undefined) { for (const c of categories()) S.settings.cats[c] = d.allcats === '1'; save(); return rerender(); }
+    if (d.opt) { openOpt = openOpt === d.opt ? null : d.opt; return rerender(); }
+    if (d.nav) return go(d.nav);
     if (b.id === 'testvoice') return speak('¡Hola! ¿Qué tal estás? Vamos a practicar un poco de español.', true);
     if (d.del) {
       const c = S.custom.find(x => String(x.id) === d.del);
-      if (c && confirm(tr(`Lijst "${c.name}" verwijderen?`, `Delete list "${c.name}"?`))) { S.custom = S.custom.filter(x => x !== c); save(); buildWords(); renderHome(); }
+      if (c && confirm(tr(`Lijst "${c.name}" verwijderen?`, `Delete list "${c.name}"?`))) { S.custom = S.custom.filter(x => x !== c); save(); buildWords(); rerender(); }
       return;
     }
     if (b.id === 'cadd') {
       const name = $('#cname').value.trim() || tr('Eigen lijst', 'My list'), text = $('#ctext').value;
       const n = parseList(text).length;
       if (!n) { $('#cmsg').textContent = tr('Geen woorden gevonden. Gebruik: nederlands = spaans', 'No words found. Use: english = spanish'); return; }
-      S.custom.push({ id: Date.now(), name, text }); save(); buildWords(); renderHome();
+      S.custom.push({ id: Date.now(), name, text }); addOpen = true; save(); buildWords(); rerender();
       $('#cmsg').textContent = tr(`${n} woorden toegevoegd aan "${name}"`, `${n} words added to "${name}"`);
       return;
     }
@@ -1117,14 +1180,14 @@
       return;
     }
     if (b.id === 'reset' && confirm(tr('Alle voortgang wissen? Je eigen lijsten en aanpassingen blijven bewaard.', 'Reset all progress? Your own lists and edits will be kept.'))) {
-      S.cards = {}; S.log = {}; save(); renderHome(); renderTop();
+      S.cards = {}; S.log = {}; save(); rerender();
     }
   });
 
   // tooltip bij de grafieken
   const vtip = document.createElement('div');
   vtip.className = 'vtip'; vtip.hidden = true; document.body.appendChild(vtip);
-  $('#home').addEventListener('mousemove', e => {
+  $('main').addEventListener('mousemove', e => {
     const h = e.target.closest && e.target.closest('[data-tip]');
     if (!h) { vtip.hidden = true; return; }
     const [head, ...rest] = h.dataset.tip.split('\n');
@@ -1134,9 +1197,9 @@
     vtip.style.left = Math.min(window.innerWidth - r.width - 8, e.clientX + 14) + 'px';
     vtip.style.top = Math.max(8, e.clientY - r.height - 12) + 'px';
   });
-  $('#home').addEventListener('mouseleave', () => { vtip.hidden = true; });
+  $('main').addEventListener('mouseleave', () => { vtip.hidden = true; });
 
-  $('#home').addEventListener('change', e => {
+  $('main').addEventListener('change', e => {
     const el = e.target;
     if (el.id === 'lang') {
       if (el.value === LANG) return;
@@ -1144,25 +1207,26 @@
       const u = new URL(location.href); u.searchParams.delete('lang');
       return location.replace(u.href);
     }
-    if (el.dataset.tense) { S.settings.tenses[el.dataset.tense] = el.checked; save(); return renderHome(); }
-    if (el.id === 'vosotros') { S.settings.vosotros = el.checked; save(); return renderHome(); }
+    if (el.dataset.tense) { S.settings.tenses[el.dataset.tense] = el.checked; save(); return rerender(); }
+    if (el.id === 'vosotros') { S.settings.vosotros = el.checked; save(); return rerender(); }
     if (el.dataset.set) {
       const k = el.dataset.set;
       S.settings[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Math.max(0, parseInt(el.value, 10) || 0) : el.value;
       save();
       if (k === 'accent' || k === 'voice') { pickVoice(); speak('¡Hola! ¿Qué tal?', true); }
-      return renderHome();
+      return rerender();
     }
     if (el.id === 'import' && el.files[0]) {
       const fr = new FileReader();
       fr.onload = () => {
-        try { S = merge(JSON.parse(fr.result)); save(); push(); buildWords(); pickVoice(); renderHome(); renderTop(); alert(tr('Backup teruggezet.', 'Backup restored.')); }
+        try { S = merge(JSON.parse(fr.result)); save(); push(); buildWords(); pickVoice(); rerender(); alert(tr('Backup teruggezet.', 'Backup restored.')); }
         catch (err) { alert(tr('Dit bestand kon niet gelezen worden.', 'This file could not be read.')); }
       };
       fr.readAsText(el.files[0]);
     }
   });
 
+  $('#list').addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('addlist')) addOpen = e.target.open; }, true);
   $('#list').addEventListener('input', e => { if (e.target.id === 'lq') { listQuery = e.target.value; renderList(true); } });
   $('#list').addEventListener('change', e => { if (e.target.id === 'lcat') { listCat = e.target.value; renderList(); } });
   $('#list').addEventListener('keydown', e => {
@@ -1170,7 +1234,6 @@
   });
   $('#list').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.id === 'listback') return goHome();
     if (b.id === 'bulkknown') {
       const q = plain(listQuery.trim());
       const items = WORD_ITEMS.filter(it => (!listCat || it.cat === listCat) && (!q || plain(it.nl).includes(q) || plain(it.es).includes(q)) && itemStatus(it)[0] === 'new');
@@ -1210,8 +1273,9 @@
 
   (async function boot() {
     document.title = tr('¡Vamos! Spaans', '¡Vamos! Spanish');
-    $('#brand span').textContent = tr('Spaans oefenen', 'Spanish practice');
-    $('#stop').textContent = tr('stoppen', 'stop');
+    const NAV = { home: tr('Vandaag', 'Today'), progress: tr('Voortgang', 'Progress'), list: tr('Woordenlijst', 'Word list'), settings: tr('Instellingen', 'Settings') };
+    for (const b of document.querySelectorAll('.tabs [data-nav]')) b.textContent = NAV[b.dataset.nav];
+    $('#stop').textContent = tr('Stoppen', 'Stop');
     $('#answer').setAttribute('aria-label', tr('Jouw antwoord', 'Your answer'));
     // online: als app te installeren, werkt ook offline, en haalt altijd eerst de nieuwste versie op
     if (location.protocol === 'https:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
