@@ -13,7 +13,7 @@ $g.Clear([System.Drawing.Color]::Transparent)
 $r = 56; $path = New-Object System.Drawing.Drawing2D.GraphicsPath
 $path.AddArc(0, 0, $r, $r, 180, 90); $path.AddArc($size - $r, 0, $r, $r, 270, 90)
 $path.AddArc($size - $r, $size - $r, $r, $r, 0, 90); $path.AddArc(0, $size - $r, $r, $r, 90, 90); $path.CloseFigure()
-$g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(36, 72, 184))), $path)
+$g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(194, 65, 12))), $path)
 $font = New-Object System.Drawing.Font('Segoe UI', 150, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
 $fmt = New-Object System.Drawing.StringFormat; $fmt.Alignment = 'Center'; $fmt.LineAlignment = 'Center'
 $g.DrawString([string][char]0x00A1, $font, [System.Drawing.Brushes]::White, (New-Object System.Drawing.RectangleF 0, 8, $size, $size), $fmt)
