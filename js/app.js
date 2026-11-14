@@ -1073,7 +1073,9 @@
     if (sess && (sess.state === 'feedback' || sess.state === 'retype') && sess.res) commit();
     if ('speechSynthesis' in window) speechSynthesis.cancel();
     const s = sess;
-    const firstTry = s.total ? Math.round(100 * (s.total - s.failed.size) / s.total) : 0;
+    // alleen de kaarten die je echt beantwoord hebt tellen mee (bij stoppen halverwege)
+    const tried = s.seen.size;
+    const firstTry = tried ? Math.round(100 * (tried - s.failed.size) / tried) + '%' : '–';
     const rows = s.wrong.map(c => { const v = view(c); return `<li><span>${v.list || v.prompt}</span><b>${v.answers.map(esc).join(' / ')}</b></li>`; }).join('');
     const nx = s.kind === 'hard' ? null : plan(s.kind);
     $('#done').innerHTML = `
@@ -1081,7 +1083,7 @@
         <h2>${s.queue.length ? tr('Gestopt', 'Stopped') : '¡Terminado!'}</h2>
         <div class="figures">
           <div><b>${s.done}</b><span>${tr('kaarten gedaan', 'cards done')}</span></div>
-          <div><b>${firstTry}%</b><span>${tr('in één keer goed', 'right first time')}</span></div>
+          <div><b>${firstTry}</b><span>${tr('in één keer goed', 'right first time')}</span></div>
           <div><b>${streak()}</b><span>${tr('dagen op rij', 'day streak')}</span></div>
         </div>
         ${rows ? `<h3>${tr('Deze komen zo nog een keer terug', 'These will come back again soon')}</h3><ul class="wrong">${rows}</ul>` : ''}
