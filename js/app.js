@@ -768,6 +768,15 @@
         </div>
       </section>
     </div>`;
+    columns();
+  }
+  // Blokken om en om over twee kolommen, zodat ze zonder gaten onder elkaar aansluiten.
+  // Op een smal scherm vallen de kolommen weg en staan de blokken weer in de gewone volgorde.
+  function columns() {
+    const g = $('#home .grid');
+    const cols = [0, 1].map(() => { const c = document.createElement('div'); c.className = 'col'; return c; });
+    [...g.children].forEach((p, i) => { p.style.order = i; cols[i % 2].appendChild(p); });
+    g.append(...cols);
   }
 
   // ---------- woordenlijst ----------
