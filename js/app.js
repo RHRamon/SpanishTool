@@ -647,8 +647,8 @@
         <h2>${tr('Hoe goed je je kaarten kent', 'How well you know your cards')}</h2>
         <div class="mlegend">${[5, 4, 3, 2, 1].map(i => `<span>${tile(i)}${SCORE_NL[i]}</span>`).join('')}</div>
         ${kChart}
-        ${kdist.filter(Boolean).length < 2 ? `<p class="note">${tr('Elke dag dat je oefent komt er een staaf bij. Kijk hoe het donkere blauw onderin groeit.',
-          'Every day you practise adds a bar. Watch the dark blue at the bottom grow.')}</p>` : ''}
+        ${kdist.filter(Boolean).length < 2 ? `<p class="note">${tr('Elke dag dat je oefent komt er een staaf bij. Kijk hoe het donkere oranje onderin groeit.',
+          'Every day you practise adds a bar. Watch the dark orange at the bottom grow.')}</p>` : ''}
       </section>
       <section class="sheet">
         <h2>${tr('Antwoorden per dag', 'Answers per day')}</h2>
