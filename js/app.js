@@ -612,6 +612,38 @@
       g += `<text x="${L + slot * (i + 0.5)}" y="${H - 5}" class="xt">${i === n - 1 ? tr('vandaag', 'today') : dayLabel(days[i])}</text>`;
     return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="${esc(label)}">${g}</svg>`;
   }
+  // gestapelde vlakgrafiek: één doorlopend vlak per laag; cols[i] = null als die dag nog niet gemeten is
+  function areaChart(cols, days, colors, tips, label) {
+    const W = 720, H = 170, L = 36, B = 22, T = 8, n = cols.length;
+    const max = Math.max(1, ...cols.map(c => c ? sum(c) : 0)), step = niceStep(max), top = Math.ceil(max / step) * step;
+    const slot = (W - L) / n, cx = i => L + slot * (i + 0.5);
+    const y = v => T + (H - T - B) * (1 - v / top);
+    let g = '';
+    for (let v = 0; v <= top; v += step)
+      g += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" class="${v ? 'gl' : 'base'}"/><text x="${L - 8}" y="${y(v) + 4}" class="yt">${v}</text>`;
+    // aaneengesloten reeksen gemeten dagen
+    const runs = []; let cur = null;
+    cols.forEach((c, i) => { if (c) { if (!cur) runs.push(cur = []); cur.push(i); } else cur = null; });
+    const layers = colors.length;
+    for (const run of runs) {
+      // één meetpunt: teken het als smal blok zodat het zichtbaar is
+      const xs = run.length > 1 ? run.map(cx) : [cx(run[0]) - slot * 0.35, cx(run[0]) + slot * 0.35];
+      const idx = run.length > 1 ? run : [run[0], run[0]];
+      const cum = idx.map(i => { let a = 0; return [0, ...cols[i].map(v => a += v)]; });
+      for (let k = 0; k < layers; k++) {
+        if (!cum.some(c => c[k + 1] > c[k])) continue;
+        const upper = xs.map((x, j) => `${x.toFixed(1)},${y(cum[j][k + 1]).toFixed(1)}`);
+        const lower = xs.map((x, j) => `${x.toFixed(1)},${y(cum[j][k]).toFixed(1)}`).reverse();
+        g += `<polygon points="${upper.concat(lower).join(' ')}" fill="var(${colors[k]})" class="layer"/>`;
+      }
+    }
+    cols.forEach((c, i) => {
+      g += `<rect class="hit" x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}" data-tip="${esc(tips[i])}"/>`;
+    });
+    for (const i of [...new Set([0, Math.floor((n - 1) / 2), n - 1])])
+      g += `<text x="${cx(i)}" y="${H - 5}" class="xt">${i === n - 1 ? tr('vandaag', 'today') : dayLabel(days[i])}</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="${esc(label)}">${g}</svg>`;
+  }
   function renderProgress() {
     snapshot();
     const t = today(), N = 30, days = [];
@@ -626,7 +658,7 @@
     let rev = 0, cor = 0;
     for (const x of days.slice(-7)) { const L = S.log[x]; if (L) { rev += L.reviews || 0; cor += L.correct || 0; } }
     const order = [4, 3, 2, 1, 0]; // sterk onderaan, zwak bovenaan
-    const kChart = barChart(kdist.map(d => d && order.map(k => d[k])), kd, order.map(k => '--k' + (k + 1)),
+    const kChart = areaChart(kdist.map(d => d && order.map(k => d[k])), kd, order.map(k => '--k' + (k + 1)),
       kdist.map((d, i) => `${dayLabel(kd[i])}\n` + (d ? [4, 3, 2, 1, 0].map(k => `${SCORE_NL[k + 1]}: ${d[k]}`).join('\n') : tr('nog niet gemeten', 'not measured yet'))),
       tr('Aantal kaarten per kenniscijfer per dag', 'Number of cards per knowledge score per day'));
     const acts = days.map(x => S.log[x] && S.log[x].reviews ? [S.log[x].reviews] : null);
@@ -647,8 +679,8 @@
         <h2>${tr('Hoe goed je je kaarten kent', 'How well you know your cards')}</h2>
         <div class="mlegend">${[5, 4, 3, 2, 1].map(i => `<span>${tile(i)}${SCORE_NL[i]}</span>`).join('')}</div>
         ${kChart}
-        ${kdist.filter(Boolean).length < 2 ? `<p class="note">${tr('Elke dag dat je oefent komt er een staaf bij. Kijk hoe het donkere oranje onderin groeit.',
-          'Every day you practise adds a bar. Watch the dark orange at the bottom grow.')}</p>` : ''}
+        ${kdist.filter(Boolean).length < 2 ? `<p class="note">${tr('Elke dag dat je oefent groeit de grafiek een dag. Kijk hoe het donkere oranje onderin dikker wordt.',
+          'Every day you practise extends the chart by a day. Watch the dark orange at the bottom get thicker.')}</p>` : ''}
       </section>
       <section class="sheet">
         <h2>${tr('Antwoorden per dag', 'Answers per day')}</h2>

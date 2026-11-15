@@ -204,6 +204,7 @@ main > section > * + * { margin-top: 28px; }
 .chart .base { stroke: var(--line); stroke-width: 1; }
 .chart .yt { fill: var(--muted); font-size: 11px; text-anchor: end; font-variant-numeric: tabular-nums; }
 .chart .xt { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+.chart .layer { stroke: var(--surface); stroke-width: 1.5; stroke-linejoin: round; }
 .chart .hit { fill: transparent; }
 .chart .hit:hover { fill: var(--ink); fill-opacity: .05; }
 .vtip { position: fixed; z-index: 50; pointer-events: none; background: var(--ink); color: var(--surface);
