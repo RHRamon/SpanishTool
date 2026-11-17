@@ -539,9 +539,11 @@
 
   function renderTop() {
     const L = S.log[today()] || { reviews: 0 }, st = streak();
-    const days = EN ? (st === 1 ? 'day' : 'days') : (st === 1 ? 'dag' : 'dagen');
+    const total = Object.values(S.log).filter(x => x && x.reviews).length;
+    const days = n => EN ? (n === 1 ? 'day' : 'days') : (n === 1 ? 'dag' : 'dagen');
     $('#topstats').innerHTML =
-      `<span class="streak ${st ? 'on' : ''}" title="${tr('Dagen op rij geoefend', 'Days practised in a row')}"><b>${st}</b> ${days}</span>` +
+      `<span class="streak ${st ? 'on' : ''}" title="${tr('Dagen op rij geoefend', 'Days practised in a row')}"><b>${st}</b> ${days(st)} ${tr('op rij', 'in a row')}</span>` +
+      `<span title="${tr('Dagen in totaal geoefend', 'Days practised in total')}"><b>${total}</b> ${days(total)} ${tr('totaal', 'total')}</span>` +
       `<span title="${tr('Vandaag beantwoord', 'Answered today')}"><b>${L.reviews}</b> ${tr('vandaag', 'today')}</span><span id="sync"></span>`;
     renderSync();
   }
