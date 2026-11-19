@@ -396,7 +396,7 @@
   // Wat komt er in de volgende ronde?
   //  1. leerfase-kaarten die weer aan de beurt zijn + herhalingen van vandaag
   //  2. nieuwe kaarten, zoveel als je aankunt
-  //  3. aanvullen met je zwakste kaarten (extra oefening, verstoort de planning niet)
+  //  3. aanvullen met kaarten die je de laatste keer fout had (wat je al goed had, komt niet nog eens terug)
   function plan(kind) {
     const kinds = kind === 'all' ? KINDS : [kind];
     const t = today(), nw = Date.now(), size = S.settings.sessionSize || 40;
@@ -407,7 +407,7 @@
       for (const c of p) {
         const x = S.cards[c.id]; if (!x) continue;
         if (isDue(x, t, nw)) (x.learn ? learnNow : reviews).push(c);
-        else if (score(x) <= 2) (x.at > nw - 3 * MIN ? recent : weak).push(c);
+        else if (x.ok === false) (x.at > nw - 3 * MIN ? recent : weak).push(c); // alleen kaarten die je de laatste keer fout had
       }
       freshPer.push(candidates(k, p));
     }
