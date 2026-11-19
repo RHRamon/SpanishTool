@@ -17,6 +17,7 @@
   const setName = s => EN ? (window.SENTENCE_SETS_EN[s] || s) : s;
 
   // ---------- instellingen & opslag ----------
+  const VERSION = '1.1';        // ophogen bij elke push, staat naast het logo
   const KEY = EN ? 'spaanstool-en-v1' : 'spaanstool-v1';
   const INTERVALS = [0, 1, 2, 4, 7, 14, 30, 60, 120, 240]; // dagen per "bak"
   const MAXB = INTERVALS.length - 1;
@@ -396,7 +397,8 @@
   // Wat komt er in de volgende ronde?
   //  1. leerfase-kaarten die weer aan de beurt zijn + herhalingen van vandaag
   //  2. nieuwe kaarten, zoveel als je aankunt
-  //  3. aanvullen met kaarten die je de laatste keer fout had (wat je al goed had, komt niet nog eens terug)
+  //  3. aanvullen met zwakke kaarten die je vandaag nog niet goed had (extra oefening, verstoort de planning niet)
+  //  4. dan nog te kort? aanvullen met nieuwe kaarten
   function plan(kind) {
     const kinds = kind === 'all' ? KINDS : [kind];
     const t = today(), nw = Date.now(), size = S.settings.sessionSize || 40;
@@ -407,7 +409,7 @@
       for (const c of p) {
         const x = S.cards[c.id]; if (!x) continue;
         if (isDue(x, t, nw)) (x.learn ? learnNow : reviews).push(c);
-        else if (x.ok === false) (x.at > nw - 3 * MIN ? recent : weak).push(c); // alleen kaarten die je de laatste keer fout had
+        else if (score(x) <= 2 && !(x.ok === true && x.last === t)) (x.at > nw - 3 * MIN ? recent : weak).push(c); // zwak, en vandaag nog niet goed gehad
       }
       freshPer.push(candidates(k, p));
     }
@@ -422,6 +424,9 @@
     // zwakke kaarten blijven terugkomen; net geoefende pas als er niets anders is, langst geleden eerst
     recent.sort((a, b) => (C(a).at || 0) - (C(b).at || 0));
     const extra = [...weak, ...recent].slice(0, fill);
+    // nog steeds te kort? aanvullen met nieuwe kaarten
+    const short = Math.min(size, ROUND_MIN) - old.length - nNew - extra.length;
+    if (short > 0) nNew += Math.min(short, Math.max(0, st.avail - nNew));
     if (!old.length && !nNew && !extra.length && st.avail) { // nooit vastlopen
       nNew = Math.min(5, st.avail); budget.why = tr('alles staat stevig, dus weer een paar nieuwe', 'everything is solid, so a few new ones');
     }
@@ -1311,6 +1316,8 @@
     document.title = tr('¡Vamos! Spaans', '¡Vamos! Spanish');
     const NAV = { home: tr('Vandaag', 'Today'), progress: tr('Voortgang', 'Progress'), list: tr('Woordenlijst', 'Word list'), settings: tr('Instellingen', 'Settings') };
     for (const b of document.querySelectorAll('.tabs [data-nav]')) b.textContent = NAV[b.dataset.nav];
+    $('#ver').textContent = 'v' + VERSION;
+    $('#ver').title = tr('Versie', 'Version');
     $('#stop').textContent = tr('Stoppen', 'Stop');
     $('#answer').setAttribute('aria-label', tr('Jouw antwoord', 'Your answer'));
     // online: als app te installeren, werkt ook offline, en haalt altijd eerst de nieuwste versie op

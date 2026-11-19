@@ -64,6 +64,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; background: var(-
   background: none; border: 0; padding: 0; color: var(--accent);
   font-size: 1.45rem; font-weight: 700; letter-spacing: -.02em;
 }
+.ver { margin-left: 6px; font-size: .7rem; font-weight: 500; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tabs { display: flex; gap: 4px; height: 100%; }
 .tabs button {
   border: 0; background: none; padding: 0 12px; height: 100%; color: var(--muted); font-weight: 500;
